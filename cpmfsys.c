@@ -19,17 +19,70 @@
 
 bool free_blocks[NUM_BLOCKS];
 uint8_t main_buffer[BLOCK_SIZE];
+DirStructType *cpm_dir;
 
 //function to allocate memory for a DirStructType (see above), and populate it, given a
 //pointer to a buffer of memory holding the contents of disk block 0 (e), and an integer index
 // which tells which extent from block zero (extent numbers start with 0) to use to make the
 // DirStructType value to return.
-DirStructType *
-mkDirStruct(int index, uint8_t *e)
+DirStructType *mkDirStruct(int index, uint8_t *e)
 {
-  // create ptr d to point to the dir
+  int i, m;
+  DirStructType dir;
+  uint8_t *dir_address;
+  DirStructType *ptr_d;
 
-  return 0;
+  // point ptr_d at dir
+  ptr_d = &dir;
+
+  // get extent address in block 0
+  dir_address = e + index * EXTENT_SIZE;
+
+  dir.status = dir_address[0];
+
+  // collect 1-8 filename and append /0
+  for (i = 1; i <= 8; i++)
+  {
+    m = 0;
+    if (&dir_address[i] != NULL)
+    {
+      dir.name[m] = dir_address[i];
+    }
+    dir.name[m] = ' ';
+    m++;
+  }
+
+  dir.name[8] = '\0';
+
+  // collect 9-11 file extension
+  for (i = 9; i <= 11; i++)
+  {
+    m = 0;
+    if (&dir_address[i] != NULL)
+    {
+      dir.extension[m] = dir_address[i];
+    }
+    dir.extension[m] = ' ';
+    m++;
+  }
+
+  dir.extension[3] = '\0';
+
+  // collect 12-15 from block 0
+  dir.XL = dir_address[12];
+  dir.BC = dir_address[13];
+  dir.XH = dir_address[14];
+  dir.RC = dir_address[15];
+
+  // collect file data indices 16-31 from block 0
+  for (i = 16; i < 32; i++)
+  {
+    m = 0;
+    dir.blocks[m] = dir_address[i];
+    m++;
+  }
+
+  return ptr_d;
 }
 
 // function to write contents of a DirStructType struct back to the specified index of the extent
@@ -43,7 +96,7 @@ void writeDirStruct(DirStructType *d, uint8_t index, uint8_t *e)
 // the directory. freeList[i] == false means the block is in use.
 void makeFreeList()
 {
-  int i;
+  int i, j;
 
   free_blocks[0] = true; // set block 0 to in use
 
@@ -51,6 +104,27 @@ void makeFreeList()
   {
     free_blocks[i] = false;
   }
+
+  blockRead(main_buffer, 0); // read block 0 into main_buffer
+
+  for (i = 0; i < EXTENT_SIZE; i++)
+  {
+    cpm_dir = mkDirStruct(i, main_buffer);
+
+    // if extent is used, then mark all extent free_blocks as used
+    if (cpm_dir->status != 0xe5)
+    {
+      for (j = 0; j < 16; j++)
+      {
+        if (cpm_dir->blocks[j] != 0)
+        {
+          free_blocks[(int)cpm_dir->blocks[j]] = true;
+        }
+      }
+    }
+  }
+
+  // mkDirStruct (2, &main_buffer)
 }
 // debugging function, print out the contents of the free list in 16 rows of 16, with each
 // row prefixed by the 2-digit hex address of the first block in that row. Denote a used
