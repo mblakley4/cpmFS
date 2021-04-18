@@ -1,3 +1,12 @@
+/*
+ * COMP 7500/06: Project 4 cpmFS
+ * Michael Blakley
+ * mzb0155@auburn.edu
+ * Auburn University
+ * 
+ * This file was provided in whole with the project.
+*/
+
 #include <stdint.h>
 #include <stdlib.h>
 #include "diskSimulator.h"

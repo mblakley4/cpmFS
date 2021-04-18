@@ -1,3 +1,18 @@
+/*
+ * COMP 7500/06: Project 4 cpmFS
+ * Michael Blakley
+ * mzb0155@auburn.edu
+ * Auburn University
+ * 
+ * How to Compile?
+ * $make all
+ * 
+ * How to Run?
+ * ./cpmRun
+ * 
+ * This file was provided in whole with the project.
+*/
+
 #include <stdio.h>
 #include <stdint.h>
 #include "cpmfsys.h"
