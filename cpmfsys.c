@@ -29,7 +29,8 @@ DirStructType *cpm_dir;
 // DirStructType value to return.
 DirStructType *mkDirStruct(int index, uint8_t *e)
 {
-  int i, m;
+  int i, j, m;
+  bool foundEnd;
   DirStructType dir;
   uint8_t *dir_address;
   DirStructType *ptr_d;
@@ -43,36 +44,44 @@ DirStructType *mkDirStruct(int index, uint8_t *e)
   dir.status = dir_address[0];
 
   // collect 1-8 filename and append /0
-  for (i = 1; i <= 8; i++)
+  m = 0;
+  foundEnd = false;
+  for (i = 1; i < 9; i++)
   {
-    m = 0;
-    if (isalnum(dir_address[i]))
+    if (!foundEnd)
     {
-      dir.name[m] = dir_address[i];
-    }
-    else
-    {
-      dir.name[m] = 0x20;
+      if (isalnum(dir_address[i]))
+      {
+        dir.name[m] = dir_address[i];
+      }
+      else
+      {
+        dir.name[m] = '\0';
+        foundEnd = true;
+      }
     }
     m++;
   }
   dir.name[8] = '\0';
 
   // collect 9-11 file extension
-  for (i = 9; i <= 11; i++)
+  m = 0;
+  foundEnd = false;
+  for (j = 9; j < 12; j++)
   {
-    m = 0;
-    if (isalnum(dir_address[i]))
+    if (!foundEnd)
     {
-      dir.extension[m] = dir_address[i];
-    }
-    else
-    {
-      dir.extension[m] = ' ';
+      if (isalnum(dir_address[j]))
+      {
+        dir.extension[m] = dir_address[j];
+      }
+      else
+      {
+        dir.extension[m] = '\0';
+      }
     }
     m++;
   }
-
   dir.extension[3] = '\0';
 
   // collect 12-15 from block 0
@@ -82,9 +91,9 @@ DirStructType *mkDirStruct(int index, uint8_t *e)
   dir.RC = dir_address[15];
 
   // collect file data indices 16-31 from block 0
+  m = 0;
   for (i = 16; i < 32; i++)
   {
-    m = 0;
     dir.blocks[m] = dir_address[i];
     m++;
   }
@@ -123,9 +132,9 @@ void makeFreeList()
     {
       for (j = 0; j < 16; j++)
       {
-        if (cpm_dir->blocks[j] != 0)
+        if ((int)cpm_dir->blocks[j] != 0)
         {
-          freeList[cpm_dir->blocks[j]] = true;
+          freeList[(int)cpm_dir->blocks[j]] = true;
         }
       }
     }
@@ -164,7 +173,24 @@ void printFreeList()
 // otherwise returns extent nunber 0-31
 int findExtentWithName(char *name, uint8_t *block0)
 {
-  return 0;
+  int i;
+
+  if (checkLegalName(name))
+  {
+    return -1; // illegal name
+  }
+
+  for (i = 0; i < EXTENT_SIZE; i++)
+  {
+    cpm_dir = mkDirStruct(i, block0);
+
+    if (strcmp(cpm_dir->name, name) == 0)
+    {
+      return i; // found, return index
+    }
+  }
+
+  return -1; // not found
 }
 
 // internal function, returns true for legal name (8.3 format), false for illegal
@@ -188,7 +214,7 @@ bool checkLegalName(char *name)
       return false;
     }
   }
-  return false;
+  return true;
 }
 
 // print the file directory to stdout. Each filename should be printed on its own line,
@@ -240,11 +266,45 @@ void cpmDir()
 // modify the extent for file named oldName with newName, and write to the disk
 int cpmRename(char *oldName, char *newName)
 {
+  int index;
+
+  // put block0 in memory
+  blockRead(main_buffer, 0);
+
+  // find the index of extent with matched name
+  index = findExtentWithName(oldName, main_buffer);
+
+  // return error code if not found/invalid
+  if (index == -1)
+  {
+    return -1;
+  }
+
   return 0;
 }
 
 // delete the file named name, and free its disk blocks in the free list
 int cpmDelete(char *name)
 {
+  int index;
+
+  // put block0 in memory
+  blockRead(main_buffer, 0);
+
+  // find the index of extent with matched name
+  index = findExtentWithName(name, main_buffer);
+
+  // return error code if not found/invalid
+  if (index == -1)
+  {
+    return -1;
+  }
+
+  // create the dir
+  cpm_dir = mkDirStruct(index, main_buffer);
+
+  // set the extent to not used, i.e. delete reference access
+  cpm_dir->status = 0xe5;
+
   return 0;
 }
