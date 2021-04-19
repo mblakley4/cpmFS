@@ -14,10 +14,12 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <ctype.h>
+#include <string.h>
 #include "cpmfsys.h"
 #include "diskSimulator.h"
 
-bool free_blocks[NUM_BLOCKS];
+bool freeList[NUM_BLOCKS];
 uint8_t main_buffer[BLOCK_SIZE];
 DirStructType *cpm_dir;
 
@@ -44,25 +46,30 @@ DirStructType *mkDirStruct(int index, uint8_t *e)
   for (i = 1; i <= 8; i++)
   {
     m = 0;
-    if (&dir_address[i] != NULL)
+    if (isalnum(dir_address[i]))
     {
       dir.name[m] = dir_address[i];
     }
-    dir.name[m] = ' ';
+    else
+    {
+      dir.name[m] = 0x20;
+    }
     m++;
   }
-
   dir.name[8] = '\0';
 
   // collect 9-11 file extension
   for (i = 9; i <= 11; i++)
   {
     m = 0;
-    if (&dir_address[i] != NULL)
+    if (isalnum(dir_address[i]))
     {
       dir.extension[m] = dir_address[i];
     }
-    dir.extension[m] = ' ';
+    else
+    {
+      dir.extension[m] = ' ';
+    }
     m++;
   }
 
@@ -98,11 +105,11 @@ void makeFreeList()
 {
   int i, j;
 
-  free_blocks[0] = true; // set block 0 to in use
+  freeList[0] = true; // set block 0 to in use
 
   for (i = 1; i < NUM_BLOCKS; i++) // loop remaining array to initiate to free
   {
-    free_blocks[i] = false;
+    freeList[i] = false;
   }
 
   blockRead(main_buffer, 0); // read block 0 into main_buffer
@@ -118,13 +125,11 @@ void makeFreeList()
       {
         if (cpm_dir->blocks[j] != 0)
         {
-          free_blocks[(int)cpm_dir->blocks[j]] = true;
+          freeList[cpm_dir->blocks[j]] = true;
         }
       }
     }
   }
-
-  // mkDirStruct (2, &main_buffer)
 }
 // debugging function, print out the contents of the free list in 16 rows of 16, with each
 // row prefixed by the 2-digit hex address of the first block in that row. Denote a used
@@ -139,7 +144,7 @@ void printFreeList()
     {
       fprintf(stdout, "%2x: ", i);
     }
-    if (free_blocks[i] == true)
+    if (freeList[i] == true)
     {
       fprintf(stdout, "%s ", "*");
     }
@@ -166,6 +171,23 @@ int findExtentWithName(char *name, uint8_t *block0)
 // (name or extension too long, name blank, or  illegal characters in name or extension)
 bool checkLegalName(char *name)
 {
+  // should have a different function for checking valid extension unless we're concat'ing somewhere
+  int i;
+
+  // check file name not blank or too long
+  if (strlen(name) > 8 || strlen(name) == 0)
+  {
+    return false;
+  }
+
+  for (i = 0; i < 9; i++)
+  {
+    // check illegal char
+    if (!isalnum(name[i]))
+    {
+      return false;
+    }
+  }
   return false;
 }
 
@@ -177,8 +199,32 @@ bool checkLegalName(char *name)
 // never fail unless something is seriously wrong with the disk
 void cpmDir()
 {
+  int i, b_index, block_number, file_length;
+
+  blockRead(main_buffer, 0); // read block 0 into main_buffer
 
   printf("DIRECTORY LISTING\n");
+
+  for (i = 0; i < EXTENT_SIZE; i++)
+  {
+    cpm_dir = mkDirStruct(i, main_buffer);
+
+    if (cpm_dir->status != 0xe5)
+    {
+      // compute file length
+      block_number = 0;
+      for (b_index = 0; b_index < 16; b_index++)
+      {
+        if (cpm_dir->blocks[b_index] != 0)
+        {
+          block_number++;
+        }
+      }
+      file_length = ((block_number - 1) * 1024) + (cpm_dir->RC * 128) + cpm_dir->BC;
+
+      printf("%s.%s %i\n", cpm_dir->name, cpm_dir->extension, file_length);
+    }
+  }
 }
 
 // error codes for next five functions (not all errors apply to all 5 functions)
